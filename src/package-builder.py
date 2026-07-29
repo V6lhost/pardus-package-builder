@@ -5,7 +5,8 @@ from pathlib import Path
 import hashlib
 import shutil
 
-cache_dir = Path("/tmp/ppb/.cache")
+source_dir = Path("/tmp/ppb")
+cache_dir = source_dir / ".cache"
 cache_dir.mkdir(exist_ok=True, parents=True)
 
 def parse_config_json(file: Path):
@@ -102,6 +103,25 @@ def verify_sha256(file: Path, expected_sha256: str, status_callback):
     })
     return False
 
+def extract_archive(file: Path, extract_dir: Path, status_callback):
+    extract_dir.mkdir(exist_ok=True, parents=True)
+
+    status_callback({
+        "status": "extracting",
+        "message": f"extracting {file} to {extract_dir}..."
+    })
+
+    try:
+        shutil.unpack_archive(str(file), str(extract_dir))
+        status_callback({
+            "status": "done",
+            "message": "extracted successfully."
+        })
+        return True
+    
+    except Exception as e:
+        raise Exception(f"Error while extracting archive {file}: {e}")
+
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(description="Pardus Automatized Unofficial Package Builder")
     argparser.add_argument("config", help="Build configuration file (json)")
@@ -111,6 +131,10 @@ if __name__ == "__main__":
     edit_source_flag = args.no_prompt
     build_configuration = parse_config_json(args.config)
     for resource in build_configuration["install"]:
+        if resource["internal_path"] != "/":
+            source_dir = source_dir / resource["internal_path"]
+
         download_file(resource["url"], cache_dir / resource["name"], print, print)
-        print(verify_sha256(cache_dir / resource["name"], resource["sha256"]))
+        print(verify_sha256(cache_dir / resource["name"], resource["sha256"], print))
+        extract_archive(cache_dir / resource["name"], source_dir, print)
 
