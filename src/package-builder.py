@@ -156,6 +156,13 @@ def apply_patch(patch_file: Path, target_dir: Path, status_callback):
             "The 'patch' command is not installed on the system. Please install it."
         )
 
+def open_source_dir(source_dir: Path, mode: str = "bash", use_cwd: bool = True):
+    # some programs needs to get directory as workingdir and some needs as parameters
+    if use_cwd:
+        subprocess.run([mode], cwd=source_dir)
+    else:
+        subprocess.run([mode, source_dir])
+
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(description="Pardus Automatized Unofficial Package Builder")
     argparser.add_argument("config", help="Build configuration file (json)")
