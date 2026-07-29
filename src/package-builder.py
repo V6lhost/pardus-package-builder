@@ -6,10 +6,6 @@ import hashlib
 import shutil
 import subprocess
 
-sources_dir = Path("/tmp/ppb")
-cache_dir = sources_dir / ".cache"
-cache_dir.mkdir(exist_ok=True, parents=True)
-
 def parse_config_json(file: Path):
     with open(file, "r") as f:
         data = json.load(f)
@@ -163,6 +159,49 @@ def open_source_dir(source_dir: Path, mode: str = "bash", use_cwd: bool = True):
     else:
         subprocess.run([mode, source_dir])
 
+def configure_dir(dir: str):
+    global builder_dir
+    global source_dir
+    global cache_dir
+
+    builder_dir = Path(dir)
+    source_dir = builder_dir / "source"
+    cache_dir = builder_dir / "cache"
+    cache_dir.mkdir(exist_ok=True, parents=True)
+    source_dir.mkdir(exist_ok=True)
+
+def prepare_sources(build_configuration: dict):
+    source_file = build_configuration["install"]
+    source_file_path = cache_dir / source_file["name"]
+    source_patches = source_file.get("patches")
+
+    download_file(url=source_file["url"], target_path=source_file_path, status_callback=print, progress_callback=print)
+    verify_sha256(file=source_file_path, expected_sha256=source_file["sha256"], status_callback=print)
+
+    if source_file["type"] == "archive":
+        extract_archive(file=source_file_path, extract_dir=source_dir, status_callback=print)
+    else:
+        shutil.copy2(src=source_file_path, dst=source_dir)
+
+    if source_patches:
+        for patch in source_patches:
+            patch_name = patch["name"]
+            patch_url = patch["url"]
+            patch_sha256 = patch["sha256"]
+            patch_path = cache_dir / patch_name
+
+            download_file(url=patch_url, target_path=patch_path, status_callback=print, progress_callback=print)
+            verify_sha256(file=patch_path, expected_sha256=patch_sha256, status_callback=print)
+
+            subdir = source_file.get("subdir")
+
+            patch_target = source_dir
+            if subdir:
+                patch_target = source_dir / subdir
+
+            apply_patch(patch_file=patch_path, target_dir=patch_target, status_callback=print)
+
+
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(description="Pardus Automatized Unofficial Package Builder")
     argparser.add_argument("config", help="Build configuration file (json)")
@@ -171,4 +210,6 @@ if __name__ == "__main__":
     args = argparser.parse_args()
     edit_source_flag = args.no_prompt
     build_configuration = parse_config_json(args.config)
-    
+
+    configure_dir(dir="/tmp/ppb")
+    prepare_sources(build_configuration)
