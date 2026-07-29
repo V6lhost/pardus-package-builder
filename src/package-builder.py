@@ -4,9 +4,10 @@ import requests
 from pathlib import Path
 import hashlib
 import shutil
+import subprocess
 
-source_dir = Path("/tmp/ppb")
-cache_dir = source_dir / ".cache"
+sources_dir = Path("/tmp/ppb")
+cache_dir = sources_dir / ".cache"
 cache_dir.mkdir(exist_ok=True, parents=True)
 
 def parse_config_json(file: Path):
@@ -122,6 +123,39 @@ def extract_archive(file: Path, extract_dir: Path, status_callback):
     except Exception as e:
         raise Exception(f"Error while extracting archive {file}: {e}")
 
+def apply_patch(patch_file: Path, target_dir: Path, status_callback):
+    status_callback({
+            "status": "Patching",
+            "message": f"Applying patch {patch_file.name} to {target_dir}...",
+        })
+
+    try:
+        command = ["patch", "-p1", "-i", str(patch_file.resolve())]
+        status_callback(command)
+        result = subprocess.run(
+            command,
+            cwd=str(target_dir.resolve()),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        status_callback({
+            "status": "Done",
+            "message": "Patch applied successfully."
+        })
+        return True
+
+    except subprocess.CalledProcessError as e:
+        status_callback({
+                "status": "Failed",
+                "message": f"Failed to apply patch {patch_file} to {target_dir}.: {e}"
+        })
+    except FileNotFoundError:
+        raise Exception(
+            "The 'patch' command is not installed on the system. Please install it."
+        )
+
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(description="Pardus Automatized Unofficial Package Builder")
     argparser.add_argument("config", help="Build configuration file (json)")
@@ -130,11 +164,4 @@ if __name__ == "__main__":
     args = argparser.parse_args()
     edit_source_flag = args.no_prompt
     build_configuration = parse_config_json(args.config)
-    for resource in build_configuration["install"]:
-        if resource["internal_path"] != "/":
-            source_dir = source_dir / resource["internal_path"]
-
-        download_file(resource["url"], cache_dir / resource["name"], print, print)
-        print(verify_sha256(cache_dir / resource["name"], resource["sha256"], print))
-        extract_archive(cache_dir / resource["name"], source_dir, print)
-
+    
