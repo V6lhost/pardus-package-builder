@@ -2,6 +2,8 @@ import json
 import argparse
 import requests
 from pathlib import Path
+import hashlib
+import shutil
 
 cache_dir = Path("/tmp/ppb/.cache")
 cache_dir.mkdir(exist_ok=True, parents=True)
@@ -73,6 +75,33 @@ def download_file(url: str, target_path: Path, status_callback, progress_callbac
             temp_path.unlink()
         raise Exception(f"Error while downloading file: {e}")
 
+def verify_sha256(file: Path, expected_sha256: str, status_callback):
+    sha256_hash = hashlib.sha256()
+
+    status_callback({
+        "status": "calculating",
+        "message": f"Calculating SHA256 of {file}, expected result is {expected_sha256}"
+    })
+
+    with open(file, "rb") as f:
+        for byte_block in iter(lambda: f.read(8192), b""): # 8kb per block to avoid filling up ram
+            sha256_hash.update(byte_block)
+    
+    calculated_hash = sha256_hash.hexdigest()
+
+    if calculated_hash.lower() == expected_sha256.lower():
+        status_callback({
+            "status": "done",
+            "message": f"sha256 verify of {file} is successful. Result is {calculated_hash}"
+        })
+        return True
+    
+    status_callback({
+        "status": "failed",
+        "message": f"sha256 checksum of {file} does not match with {expected_sha256}"
+    })
+    return False
+
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(description="Pardus Automatized Unofficial Package Builder")
     argparser.add_argument("config", help="Build configuration file (json)")
@@ -83,4 +112,5 @@ if __name__ == "__main__":
     build_configuration = parse_config_json(args.config)
     for resource in build_configuration["install"]:
         download_file(resource["url"], cache_dir / resource["name"], print, print)
+        print(verify_sha256(cache_dir / resource["name"], resource["sha256"]))
 
