@@ -280,7 +280,7 @@ class PackageBuilder:
 
         open_path = self.source_dir
         if self.source_subdir:
-            open_path.join(self.source_subdir)
+            open_path = open_path / self.source_subdir
 
         if path is not None:
             open_path = path
