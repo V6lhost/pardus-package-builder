@@ -1,5 +1,5 @@
 import argparse
-# import docker
+import docker
 import hashlib
 import json
 import os
@@ -294,6 +294,175 @@ class PackageBuilder:
             })
             return False
 
+    # Docker functions
+    def initialize_container(self, image: str = "pardus/yirmibes", status_callback=None):
+        
+        if status_callback is None:
+            status_callback = self.status_callback
+        
+        if self.source_subdir:
+            source_path = self.source_dir / self.source_subdir
+        else:
+            source_path = self.source_dir
+
+        status_callback({
+            "status": "Starting container...",
+            "message": f"Starting container with image: {image} volume: {source_path}"
+        })
+
+        try:
+            self.docker_client = docker.from_env()
+
+            volume_config = {
+                str(source_path.resolve()): {
+                    'bind': '/app/build',
+                    'mode': 'rw'
+                }
+            }
+
+            container = self.docker_client.containers.run(
+                image=image,
+                command="sleep infinity",
+                detach=True,
+                volumes=volume_config,
+                auto_remove=True
+            )
+
+            self.container_id = container.id
+
+            status_callback({
+                "status": "Done",
+                "message": f"Container started successfully. ID: {self.container_id}"
+            })
+            return True
+        
+        except Exception as e:
+            status_callback({
+                "status": "Failed",
+                "message": f"Failed to start container: {e}"
+            })
+            return False
+    
+    def _exec_in_container(self, command: str, status_callback, stdout_callback, as_root: bool = False):
+        user_str = "root" if as_root else f"{os.getuid()}:{os.getgid()}" # get current user permissions and run with them if as_root=False
+
+        status_callback({
+            "status": "Executing",
+            "message": f"Running as [{user_str}]: {command}"
+        })
+
+        try:
+            # get container id
+            container = self.docker_client.containers.get(self.container_id)
+
+            # run command inside container and send logs with stdout callback
+            exec_log = container.exec_run(
+                cmd=["bash", "-c", command],
+                user=user_str,
+                workdir="/app/build",
+                stream=True,
+                demux=False
+            )
+
+            # send logs
+            for chunk in exec_log.output:
+                if chunk:
+                    line = chunk.decode("utf-8", errors="ignore").strip()
+                    if line:
+                        stdout_callback(line)
+
+            return True
+
+        except Exception as e:
+            status_callback({
+                "status": "Failed",
+                "message": f"Execution failed: {e}"
+            })
+            return False
+
+    def _install_dependecies(self, status_callback, stdout_callback=None):
+        status_callback({
+            "status": "Installing dependecies",
+            "message": "Installing dependecies into container"
+        })
+
+        if not self.recipe_build_deps:
+            status_callback({
+                "status": "Passed",
+                "message": "No build dependecies"
+            })
+            return True
+        
+        deps_list = " ".join(self.recipe_build_deps)
+        command = f"export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -y {deps_list}"
+        return self._exec_in_container(command, as_root=True, status_callback=status_callback, stdout_callback=stdout_callback)
+
+    def _build_package(self, status_callback, stdout_callback=None):
+        status_callback({
+            "status": "Building...",
+            "message": f"Building package {self.recipe_name} inside container"
+        })
+
+        return self._exec_in_container(command=self.recipe_build_cmd, status_callback=status_callback, stdout_callback=stdout_callback)
+
+    def clean_source(self, status_callback, stdout_callback=None):
+        status_callback({
+            "status": "Cleaning...",
+            "message": f"Cleaning the source directory"
+        })
+
+        return self._exec_in_container(command=self.recipe_clean_cmd, status_callback=status_callback, stdout_callback=stdout_callback)
+
+    def stop_container(self, status_callback=None):
+        if status_callback is None:
+            status_callback = self.status_callback
+
+        if hasattr(self, "container_id") and self.container_id:
+            status_callback({
+                "status": "Docker",
+                "message": "Stopping and removing container..."
+            })
+
+            try:
+                container = self.docker_client.containers.get(self.container_id)
+                container.remove(force=True)
+                
+                self.container_id = None
+                status_callback({
+                    "status": "Done",
+                    "message": "Container cleaned up successfully."
+                })
+                return True
+
+            except Exception as e:
+                status_callback({
+                    "status": "Failed",
+                    "message": f"Failed to stop container: {e}"
+                })
+                return False
+        else:
+            status_callback({
+                "status": "Skipped",
+                "message": "No active container to stop."
+            })
+            return True
+
+    def run_build_process(self, status_callback=None, stdout_callback=None):
+        if status_callback is None:
+            status_callback = self.status_callback
+        if stdout_callback is None:
+            stdout_callback = lambda data: None
+        if self._install_dependecies(status_callback=status_callback, stdout_callback=stdout_callback):
+            if self._build_package(status_callback=status_callback, stdout_callback=stdout_callback):
+                return True
+            
+        else:
+            status_callback({
+                "status": "Failed",
+                "message": "Run build process failed"
+            })
+        return False
+
 if __name__ == "__main__":    
     argparser = argparse.ArgumentParser(description="Pardus Automatized Unofficial Package Builder")
     argparser.add_argument("recipe", help="Build configuration recie (json)")
@@ -314,3 +483,8 @@ if __name__ == "__main__":
     if not edit_source_flag:
         if not patch_result:
             package_builder.open_source_dir(mode="xdg-open", use_cwd=False)
+    
+    package_builder.initialize_container()
+    package_builder.run_build_process()
+    package_builder.clean_source(status_callback=print, stdout_callback=print)
+    package_builder.stop_container()
