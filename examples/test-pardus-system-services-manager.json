@@ -1,0 +1,32 @@
+{
+    "name": "Pardus System Services Manager",
+    "version": "1.0.0",
+    "build_deps": [
+        "make",
+        "binutils",
+        "libpython3.13",
+        "python3",
+        "python3-venv",
+        "dpkg"
+    ],
+    "env_vars": [], 
+    "install": {
+            "name": "pardus-system-services-manager.tar.gz",
+            "url": "https://github.com/V6lhost/pardus-system-services-manager/tarball/2d00076",
+            "sha256": "90dbe23cccd45c9fefbb59c831e50da626fbf9e210c9aa449c6fe28695e5a827",
+            "type": "archive",
+            "subdir": "V6lhost-pardus-system-services-manager-2d00076",
+            "patches": [
+                {
+                "name": "patch1.patch",
+                "url": "https://github.com/V6lhost/pardus-system-services-manager/commit/030e8c4d83ae9c1c75674b2b11ff88f550460791.patch",
+                "sha256": "10ef27bd99238cdc199967891c3e68014c8a33552e80d2aece02f31c5d10dab0"
+                }
+            ]
+        },
+    "build_cmd": "make build",
+    "clean_cmd": "make clean",
+    "export_files": [
+        "output_deb/pardus-system-services-manager-1.0.0.deb"
+    ]
+}
