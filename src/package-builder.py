@@ -501,11 +501,13 @@ if __name__ == "__main__":
             text=True,
             check=True
         ).stdout.strip()
+    
+    home_cache_dir = Path.home() / ".cache/pardus-package-builder"
 
     if edit_source_flag:
         print("Warning! build without interactive prompts selected. Build process will fail directly in case any errors.")
 
-    package_builder = PackageBuilder(working_dir="/tmp/ppb", recipe=args.recipe, status_callback=print)
+    package_builder = PackageBuilder(working_dir=home_cache_dir, recipe=args.recipe, status_callback=print)
 
     if not package_builder.prepare_source(progress_callback=print):
         package_builder.clean_cache_and_source()
