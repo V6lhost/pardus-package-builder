@@ -411,6 +411,13 @@ class PackageBuilder:
             "message": f"Cleaning the source directory"
         })
 
+        if not self.recipe_clean_cmd:
+            status_callback({
+                "status": "Passed",
+                "message": "No clean command specified"
+            })
+            return True
+
         return self._exec_in_container(command=self.recipe_clean_cmd, status_callback=status_callback, stdout_callback=stdout_callback)
 
     def stop_container(self, status_callback=None):
