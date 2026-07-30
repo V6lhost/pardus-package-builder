@@ -1,2 +1,5 @@
 test/
 venv/
+
+output_deb/
+debian/usr/share/pardus-package-builder/
