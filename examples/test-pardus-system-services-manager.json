@@ -26,7 +26,5 @@
         },
     "build_cmd": "make build",
     "clean_cmd": "make clean",
-    "export_files": [
-        "output_deb/pardus-system-services-manager-1.0.0.deb"
-    ]
+    "export_file": "output_deb/pardus-system-services-manager-1.0.0.deb"
 }

@@ -5,9 +5,10 @@ import json
 import os
 import requests
 import shutil
+import sys
 import subprocess
 from pathlib import Path
-from rich.prompt import Confirm
+from rich.prompt import Prompt, Confirm
 
 class PackageBuilder:
     def __init__(self, working_dir: Path, recipe: Path, status_callback=print):
@@ -25,6 +26,11 @@ class PackageBuilder:
         self.source_dir.mkdir(exist_ok=True, parents=True)
         self.cache_dir.mkdir(exist_ok=True)
         self.download_path =  self.cache_dir / self.recipe_install["name"]
+
+        if self.source_subdir:
+            self.recipe_export_full_path = self.source_dir / self.source_subdir / self.recipe_export_file
+        else:
+            self.recipe_export_full_path = self.source_dir / self.recipe_export_file
         
         status_callback({
             "status": "Working directory initialized",
@@ -42,7 +48,7 @@ class PackageBuilder:
         self.recipe_install = build_recipe["install"]
         self.recipe_build_cmd = build_recipe["build_cmd"]
         self.recipe_clean_cmd = build_recipe.get("clean_cmd")
-        self.recipe_export_files = build_recipe["export_files"]
+        self.recipe_export_file = build_recipe["export_file"]
 
         self.source_subdir = self.recipe_install.get("subdir") # project archives which created by git includes a parent directory which needs to apply patches in it
         
@@ -266,22 +272,24 @@ class PackageBuilder:
             })
             return False
     
-    def open_source_dir(self, mode: str = "bash", use_cwd: bool = True, status_callback=None):
+    def open_application_with_path(self, mode: str = "bash", path: Path = None, use_cwd: bool = True, status_callback=None):
+        # some programs needs to get directory as workingdir and some needs as parameters
         
         if status_callback is None:
             status_callback = self.status_callback
 
-        # some programs needs to get directory as workingdir and some needs as parameters
+        open_path = self.source_dir
         if self.source_subdir:
-            source_dir = self.source_dir / self.source_subdir
-        else:
-            source_dir = self.source_dir
+            open_path.join(self.source_subdir)
+
+        if path is not None:
+            open_path = path
 
         try:
             if use_cwd:
-                subprocess.run([mode], cwd=source_dir)
+                subprocess.run([mode], cwd=open_path.parent)
             else:
-                subprocess.run([mode, source_dir])
+                subprocess.run([mode, open_path])
             return True
 
         except subprocess.CalledProcessError:
@@ -293,6 +301,14 @@ class PackageBuilder:
                 "message": f"Program {mode} not found."
             })
             return False
+
+    def clean_cache_and_source(self, status_callback=None):
+        if status_callback is None:
+            status_callback = self.status_callback
+        
+        shutil.rmtree(self.working_dir)
+        self.cache_dir.mkdir(exist_ok=True, parents=True)
+        self.source_dir.mkdir(exist_ok=True, parents=True)
 
     # Docker functions
     def initialize_container(self, image: str = "pardus/yirmibes", status_callback=None):
@@ -478,20 +494,54 @@ if __name__ == "__main__":
     args = argparser.parse_args()
     edit_source_flag = args.no_prompt
 
+    downloads_dir = subprocess.run( # Get download directory using xdg-user-dir command. localization will rename these directories so this is needed
+            ["xdg-user-dir", "DOWNLOAD"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True
+        ).stdout.strip()
+
     if edit_source_flag:
         print("Warning! build without interactive prompts selected. Build process will fail directly in case any errors.")
 
     package_builder = PackageBuilder(working_dir="/tmp/ppb", recipe=args.recipe, status_callback=print)
 
-    package_builder.prepare_source(progress_callback=print)
-    patch_result = package_builder.prepare_patches()
+    if not package_builder.prepare_source(progress_callback=print):
+        package_builder.clean_cache_and_source()
+        sys.exit(1)
 
-    # Open a terminal inside source directory in case if an error happens while doing patches.
+    if not package_builder.prepare_patches():
+        package_builder.clean_cache_and_source()
+        sys.exit(1)
+
+    # Open given application inside source directory in case if you want to edit source before building
     if not edit_source_flag:
-        if not patch_result:
-            package_builder.open_source_dir(mode="xdg-open", use_cwd=False)
+        open_source_dir = Confirm.ask("[bold Green]Do you want to open source directory before building?[/]", default=False)
+        if open_source_dir:
+            package_builder.open_application_with_path(mode="xdg-open", use_cwd=False)
+            input("Press enter to continue")
     
-    package_builder.initialize_container()
-    package_builder.run_build_process()
-    package_builder.clean_source(status_callback=print, stdout_callback=print)
+    if not package_builder.initialize_container():
+        package_builder.stop_container()
+        package_builder.clean_cache_and_source()
+        sys.exit(1)
+    
+    if not package_builder.run_build_process(stdout_callback=print):
+        package_builder.stop_container()
+        package_builder.clean_cache_and_source()
+        sys.exit(1)
+    
     package_builder.stop_container()
+    
+    install_app = Confirm.ask("[bold green]Do you want to install the package now? If you want to export the package, select 'n'. New prompt will ask you for exporting directory.[/]", default=True)
+    if install_app:
+        package_builder.open_application_with_path(mode="xdg-open", path=package_builder.recipe_export_full_path, use_cwd=False)
+        package_builder.clean_cache_and_source()
+        sys.exit(0)
+    export_path = Prompt.ask("[bold orange]Please type package export path[/]", default=downloads_dir)
+    if export_path:
+        shutil.copy(src=str(package_builder.recipe_export_full_path), dst=str(export_path))
+
+    package_builder.clean_cache_and_source()
+    sys.exit(0)
