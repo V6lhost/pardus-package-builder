@@ -1,2 +1,2 @@
 #!/bin/bash
-exec python3 /usr/share/pardus-package-builder/src/pardus-package-builder.py "$@"
+exec python3 /usr/share/pardus-package-builder/src/package-builder.py "$@"
