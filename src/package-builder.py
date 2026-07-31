@@ -490,9 +490,12 @@ if __name__ == "__main__":
     argparser = argparse.ArgumentParser(description="Pardus Automatized Unofficial Package Builder")
     argparser.add_argument("recipe", help="Build configuration recie (json)")
     argparser.add_argument("-p", "--no-prompt", action="store_true", help="Build package directly without interactive prompts")
+    argparser.add_argument("-i", "--install-directly", action="store_true", help="Install the builded package directly without asking")
+
 
     args = argparser.parse_args()
     edit_source_flag = args.no_prompt
+    install_directly_flag = args.install_directly
 
     downloads_dir = subprocess.run( # Get download directory using xdg-user-dir command. localization will rename these directories so this is needed
             ["xdg-user-dir", "DOWNLOAD"],
@@ -536,7 +539,7 @@ if __name__ == "__main__":
     
     package_builder.stop_container()
     
-    install_app = Confirm.ask("[bold green]Do you want to install the package now? If you want to export the package, select 'n'. New prompt will ask you for exporting directory.[/]", default=True)
+    install_app = True if install_directly_flag else Confirm.ask("[bold green]Do you want to install the package now? If you want to export the package, select 'n'. New prompt will ask you for exporting directory.[/]", default=True)
     if install_app:
         package_builder.open_application_with_path(mode="xdg-open", path=package_builder.recipe_export_full_path, use_cwd=False)
         shutil.copy(src=str(package_builder.recipe_export_full_path), dst="/tmp/")
