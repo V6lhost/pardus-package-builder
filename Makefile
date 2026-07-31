@@ -32,7 +32,7 @@ build: update-control
 
 run:
 	@echo "[+] Running with system Python..."
-	$(PYTHON) $(SRC_DIR)/main.py
+	$(PYTHON) $(SRC_DIR)/package-builder.py
 
 clean:
 	@echo "[-] Cleaning up..."
