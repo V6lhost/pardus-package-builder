@@ -539,7 +539,8 @@ if __name__ == "__main__":
     install_app = Confirm.ask("[bold green]Do you want to install the package now? If you want to export the package, select 'n'. New prompt will ask you for exporting directory.[/]", default=True)
     if install_app:
         package_builder.open_application_with_path(mode="xdg-open", path=package_builder.recipe_export_full_path, use_cwd=False)
-        input("Press enter to continue") # xdg-open runs directly and ends. this causes to delete cache and source. now were waiting until user presses enter
+        shutil.copy(src=str(package_builder.recipe_export_full_path), dst="/tmp/")
+        package_builder.open_application_with_path(mode="xdg-open", path="/tmp/" + package_builder.recipe_export_file.split("/")[-1], use_cwd=False)
         package_builder.clean_cache_and_source()
         sys.exit(0)
     export_path = Prompt.ask("[bold orange]Please type package export path[/]", default=downloads_dir)
