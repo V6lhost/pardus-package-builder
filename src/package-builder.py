@@ -38,24 +38,32 @@ class PackageBuilder:
         })
 
     def _parse_recipe(self, recipe_file: Path, status_callback):
-        with open(recipe_file, "r") as f:
-            build_recipe = json.load(f)
-        
-        self.recipe_name = build_recipe["name"]
-        self.recipe_version = build_recipe["version"]
-        self.recipe_build_deps = build_recipe["build_deps"]
-        self.recipe_env_vars = build_recipe.get("env_vars")
-        self.recipe_install = build_recipe["install"]
-        self.recipe_build_cmd = build_recipe["build_cmd"]
-        self.recipe_clean_cmd = build_recipe.get("clean_cmd")
-        self.recipe_export_file = build_recipe["export_file"]
+        try:
+            with open(recipe_file, "r") as f:
+                build_recipe = json.load(f)
+            
+            self.recipe_name = build_recipe["name"]
+            self.recipe_version = build_recipe["version"]
+            self.recipe_build_deps = build_recipe["build_deps"]
+            self.recipe_env_vars = build_recipe.get("env_vars")
+            self.recipe_install = build_recipe["install"]
+            self.recipe_build_cmd = build_recipe["build_cmd"]
+            self.recipe_clean_cmd = build_recipe.get("clean_cmd")
+            self.recipe_export_file = build_recipe["export_file"]
 
-        self.source_subdir = self.recipe_install.get("subdir") # project archives which created by git includes a parent directory which needs to apply patches in it
-        
-        status_callback({
-            "status": "Initialized",
-            "message": f"Recipe {recipe_file} parsed succesfully. Building Package: {self.recipe_name} {self.recipe_version}"
-        })
+            self.source_subdir = self.recipe_install.get("subdir") # project archives which created by git includes a parent directory which needs to apply patches in it
+            
+            status_callback({
+                "status": "Initialized",
+                "message": f"Recipe {recipe_file} parsed succesfully. Building Package: {self.recipe_name} {self.recipe_version}"
+            })
+            return True
+        except Exception as e:
+            status_callback({
+                "status": "Failed",
+                "message": f"Recipe {recipe_file} parse failed: {e}"
+            })
+            return False
 
     def _download_file(self, url: str, destination: Path, status_callback, progress_callback):
         temporary_download_path = Path(str(destination) + ".part")
