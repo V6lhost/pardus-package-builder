@@ -4,5 +4,8 @@ Section: utils
 Priority: optional
 Architecture: all
 Maintainer: V6lhost <v6lhost@proton.me>
-Depends: python3 (>= 3.11)
+Depends: python3 (>= 3.11),
+         docker.io,
+         python3-docker,
+         python3-rich
 Description: Automatized unofficial package builder application for Pardus.
